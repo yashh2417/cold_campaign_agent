@@ -1,0 +1,11 @@
+.env
+bland_env
+AI_CALLER_AGENT.egg-info
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env.*
+*.db
+.git
+campaign_agent
