@@ -191,34 +191,39 @@ async def get_postcall_data(request: Request, db: Session):
             logger.error(f"❌ PostgresDB insert error: {e}")
             raise HTTPException(status_code=500, detail="Database error")
         try:
-            campaign_data = CreateCampaignTable(
-                user_id = metadata.get('user_id'),
-                batch_id = data.get('batch_id'),
-                campaign_thread_id=str(campaign_thread_ID),
+            batch_id = data.get('batch_id')
+            if batch_id:
+                campaign_data = CreateCampaignTable(
+                    user_id = metadata.get('user_id'),
+                    batch_id = batch_id,
+                    campaign_thread_id=str(campaign_thread_ID),
 
-                campaign_phone_number="+919953228138",
+                    campaign_phone_number="+919953228138",
 
-                business_name = metadata.get('business_name'),
-                business_description = metadata.get('business_description'),
-                business_website = metadata.get('business_website'),
-                campaign_name = metadata.get('campaign_name'),
+                    business_name = metadata.get('business_name'),
+                    business_description = metadata.get('business_description'),
+                    business_website = metadata.get('business_website'),
+                    campaign_name = metadata.get('campaign_name'),
 
-                agent_name = metadata.get('agent_name'),
-                agent_voice = metadata.get('agent_voice'),
-                agent_role = metadata.get('agent_role'),
-                language = metadata.get('language'),
+                    agent_name = metadata.get('agent_name'),
+                    agent_voice = metadata.get('agent_voice'),
+                    agent_role = metadata.get('agent_role'),
+                    language = metadata.get('language'),
 
-                task = metadata.get('task'),
+                    task = metadata.get('task'),
 
-                start_date = parse_datetime_safe(metadata.get('start_time')) if metadata.get('start_time',False) else parse_datetime_safe("2025-08-01T18:23:21.223Z"),
-                end_date = parse_datetime_safe(metadata.get('end_time')),
+                    start_date = parse_datetime_safe(metadata.get('start_time')) if metadata.get('start_time',False) else parse_datetime_safe("2025-08-01T18:23:21.223Z"),
+                    end_date = parse_datetime_safe(metadata.get('end_time')),
 
-                call_recording = data.get('record'),
+                    call_recording = data.get('record'),
 
-                voicemail_message = metadata.get('voicemail_message'),
-                voicemail_setting = metadata.get('voicemail_setting')
-            )
-            create_campaign(campaign_data, db)
+                    voicemail_message = metadata.get('voicemail_message'),
+                    voicemail_setting = metadata.get('voicemail_setting')
+                )
+                create_campaign(campaign_data, db)
+
+            else:
+                logger.error("Could not create campaign, batch_id is missing from webhook data.")
         except Exception as e:
             logger.error("Could not add campaign %s",e)
         return {
