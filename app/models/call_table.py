@@ -7,7 +7,6 @@ from pgvector.sqlalchemy import Vector
 from app.core.database import Base
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
-from sqlalchemy import Column, Integer, String
 
 class Call(Base):
     __tablename__ = "calls"
@@ -29,15 +28,15 @@ class Call(Base):
     is_call_scheduled = Column(Boolean, nullable=False, server_default='false')
     summary = Column(Text, nullable=True)
     call_transcript = Column(Text, nullable=True)
-    # embedding = Column(Vector(1024), nullable=True)  
+    embedding = Column(Vector(1024), nullable=True)  
     task = Column(Text,nullable=True)
     webhook = Column(Text, nullable=True,default="https://bb109896dc71.ngrok-free.app/bland/postcall")
     campaign_thread_id = Column(UUID(as_uuid=True),default=uuid.uuid4,nullable=False)
     contact_id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer,nullable=True)
     recording = Column(Boolean,nullable=False,default=True)
-
-
+    recording_url = Column(Text,nullable=True)
+    is_active_for_campaign = Column(Boolean,nullable=True,default=True)
 
 class Campaign(Base):
     __tablename__ = 'campaigns'

@@ -13,33 +13,25 @@ from app.core.config import settings
 
 
 
-class SendCallRequest(BaseModel):
-    ivr_mode: Optional[bool] = True
-    voice_id: Optional[int] = 0
-    reduce_latency: Optional[bool] = True
-    request_data: Optional[Dict[str, Any]] = {}
-    metadata: Optional[Dict[str, Any]] = None
-    start_time: Optional[str] = None
-    to_phone: str
-    pathway_id: Optional[str] = None  # e.g. "c9b37160-0209-455d-b60c-fea93fc33d7b"
-    task: Optional[str] = None
-    record: Optional[bool] = True
-    webhook: Optional[str] = settings.WEBHOOK_URL
+class TestCallForm(BaseModel):
+    business_name: str
+    business_description: str
+    business_website: Optional[str] = None
+    campaign_name: str
+    agent_name: str
+    agent_voice: str
+    language: str
+    agent_role: str
+    task: str
+    voicemail_message: Optional[str] = None
+    call_recording: bool
+    voicemail_setting: bool
 
-    @field_validator('to_phone')
-    def validate_phone_number(cls, v):
-        # Basic phone number validation
-        if not re.match(r'^\+?[1-9]\d{1,14}$', v):
-            raise ValueError('Invalid phone number format')
-        return v
-
-    
-    @field_validator("metadata", mode="before")
-    def clean_metadata(cls, v):
-        if isinstance(v, dict):
-            return v
-        return None  
-    model_config = ConfigDict(from_attributes=True) 
+    @model_validator(mode="after")
+    def check_voicemail_fields(self):
+        if self.voicemail_setting and not self.voicemail_message:
+            raise ValueError("voicemail_message is required when voicemail_setting is True")
+        return self
 
 class RequestData(BaseModel):
     agent_name:Optional[str] = "maya"
@@ -122,4 +114,36 @@ class CallRead(CallBase):
     scheduled_call_datetime: Optional[datetime]
     task:Optional[str]
     
+    model_config = ConfigDict(from_attributes=True) 
+
+class SendCallRequest(BaseModel):
+    ivr_mode: Optional[bool] = True
+    reduce_latency: Optional[bool] = True
+
+    language:Optional[str] = "en"
+
+    request_data: Optional[RequestData] = {}
+    metadata: Optional[Dict[str, str]] = {}
+    task:Optional[str]="You are a professional, warm, and articulate AI sales assistant named John, calling on behalf of {{business_name}}.\n\nContext:\n{{business_description}}\n\nTask Objective:\n{{task_description}}\n\nCustomer Info:\nName: {{customer_name}}\nEmail: {{cust_email}}\n\nGoal:\nConduct a friendly, human-like phone conversation with {{customer_name}}. Present the business offering in a helpful way, and if interested, offer to send information to {{cust_email}}. If the customer is busy or unavailable, politely ask for a better time to call back and confirm availability.\n\nGuidelines:\n- Speak slowly, clearly, and warmly.\n- Begin by introducing yourself as John, the AI assistant calling on behalf of {{business_name}}.\n- Ask if you’re speaking with {{customer_name}}.\n- Be brief but engaging when explaining the service — no long monologues.\n- Pause after each key sentence to let the customer respond.\n- Always check if they’re available to talk before continuing.\n- Ask if they’d like to receive more information via email.\n- If they’re not interested or unavailable, be respectful and offer to follow up later.\n- End the conversation politely and thank them for their time.\n\nExample Flow:\nYou: Hi, is this {{customer_name}}?\n\nCustomer: Yes, speaking.\n\nYou: Great! I'm John, an AI assistant calling on behalf of {{business_name}}. We help people like you by [brief value proposition from {{business_description}}]. Is this a good time to talk?\n\n[Wait for response.]\n\nYou: No worries if you're busy. Would you prefer I call at another time? Or I can email you more information at {{cust_email}} if that’s easier.\n\n[Adjust based on customer response.]\n\nYou: Thank you, {{customer_name}}! I appreciate your time. Have a wonderful day."
+
+    to_phone: str
+
+    start_time:Optional[datetime] = None
+
+    voicemail:Optional[VoiceMail] = VoiceMail()
+    record:Optional[bool] = True
+    webhook:Optional[str] =settings.WEBHOOK_URL
+    @field_validator('to_phone')
+    def validate_phone_number(cls, v):
+        # Basic phone number validation
+        if not re.match(r'^\+?[1-9]\d{1,14}$', v):
+            raise ValueError('Invalid phone number format')
+        return v
+
+    
+    @field_validator("metadata", mode="before")
+    def clean_metadata(cls, v):
+        if isinstance(v, dict):
+            return v
+        return None  
     model_config = ConfigDict(from_attributes=True) 

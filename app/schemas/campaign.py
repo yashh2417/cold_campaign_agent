@@ -1,3 +1,4 @@
+
 from pydantic import BaseModel,ConfigDict,model_validator,Field
 from typing import Optional,Dict,List,Any
 from datetime import datetime
@@ -13,8 +14,8 @@ class CreateCampaignForm(BaseModel):
     language: str
     agent_role: str
     task: str
-    campaign_start_date: datetime
-    campaign_end_date: datetime
+    campaign_start_date: Optional[datetime] = None
+    campaign_end_date: Optional[datetime] = None
     voicemail_message: Optional[str] = None
     call_recording: bool
     voicemail_setting: bool
@@ -29,21 +30,8 @@ class CreateCampaignFormMain(BaseModel):
     form_data:CreateCampaignForm
     contacts:List[int]
 
-class EditCampaignForm(BaseModel):
-    business_name:Optional[str] = None
-    business_description: Optional[str] = None
-    business_website: Optional[str] = None
-    campaign_name:Optional[str]=None
-    agent_name:Optional[str]=None #Agent name to give for prompt
-    agent_voice:Optional[str] = None  #voice actual payload
-    language:Optional[str] = None
-    agent_role:Optional[str] = None
-    task:Optional[str] = None
-    campaign_start_data:Optional[datetime] = None
-    campaign_end_date:Optional[datetime] = None
-    voicemail_message:Optional[str] = None
-    call_recording: Optional[bool] = None # record = True for payload
-    voicemail_setting:Optional[bool] = None #voicemail on or off
+class EditCampaignForm(CreateCampaignForm):
+    pass
 
 class EditCampaign(BaseModel):
     name:Optional[str]
@@ -126,7 +114,7 @@ class CampaignRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class CampaignScreenTable(BaseModel):
-    campaign_id: int
+    batch_id:str
     campaign_thread_id: str
     campaign_name: str
     agent_name: str

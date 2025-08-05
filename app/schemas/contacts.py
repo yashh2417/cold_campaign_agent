@@ -1,5 +1,5 @@
 from pydantic import Field, EmailStr,ConfigDict, BaseModel, field_validator,  model_validator, ConfigDict
-from typing import Optional
+from typing import Optional,List
 from datetime import datetime
 from uuid import UUID
 
@@ -13,6 +13,10 @@ class CreateContactTable(BaseModel):
   user_id:Optional[int] = None
 
   model_config = ConfigDict(from_attributes=True)
+
+class ToggleContacts(BaseModel):
+  campaign_thread_id:str
+  toggled_off:List[int]
 
 class EditContactForm(BaseModel):
   contact_name:str = Field(default=None,alias ="name")

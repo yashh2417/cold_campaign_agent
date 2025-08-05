@@ -8,6 +8,15 @@ from app.models.call_table import (
 import uuid
 
 
+def get_userdata_by_userID(user_id,db):
+    return db.execute(
+        select(User.name,
+               User.phone_number,
+               User.email,
+               User.company)
+            .where(User.user_id == user_id)
+        ).fetchone()
+
 def campaigns_by_userID(user_id,db):
     return db.execute(
         select(Campaign).where(Campaign.user_id == user_id)
@@ -20,7 +29,7 @@ def get_number_of_calls_from_campaignID(campaign_thread_ID,db):
     ).scalars().all()
 
 def get_contacts_from_campaign_id(campaign_thread_id,db):
-    subquery = select(Call.contact_id).where(Call.campaign_thread_id == campaign_thread_id).subquery()
+    subquery = select(Call.contact_id).where(Call.campaign_thread_id == campaign_thread_id).where(Call.is_active_for_campaign == True).subquery()
     return db.execute(
         select(Contact).where(Contact.contact_id.in_(subquery))
     ).scalars().all()
@@ -125,3 +134,9 @@ def get_contacts_for_userID(user_id,db):
         select(Contact).
         where(Contact.user_id == user_id)
         ).scalars().all()
+
+def get_recording_url(call_id,db):
+    return db.execute(
+        select(Call.recording_url)
+        .where(Call.call_id == call_id)
+    ).scalar_one()

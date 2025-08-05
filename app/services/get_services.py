@@ -7,7 +7,8 @@ from app.crud.get_data import (
     campaigns_by_userID,
     get_number_of_calls_from_campaignID,
     get_contacts_from_campaign_id,
-    get_calls_data_from_userID
+    get_calls_data_from_userID,
+    get_recording_url
 )
 
 from app.schemas.campaign import (
@@ -24,7 +25,7 @@ from app.core.database import logger
 from app.core.config import settings
 
 import requests
-from fastapi import HTTPException
+from fastapi import HTTPException,Response
 
 async def get_call_from_id(call_id, db):
     call = get_call_by_id(db=db, call_id=call_id)
@@ -46,24 +47,45 @@ async def get_calls_from_db(limit, skip,db):
         logger.error(f"❌ Error fetching calls: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch calls")
     
-def get_call_recording_by_id(call_id):
-    bland_api_key = settings.BLAND_API_KEY
-    headers = {
-        "Authorization": f"Bearer {bland_api_key}",
-        "Content-Type": "application/json"
-        }
 
-    response = requests.get(f"https://api.bland.ai/v1/recordings/{call_id}",headers=headers)
-    return response["data"]
+# def get_call_recording_by_id(call_id: str):
+#     BLAND_API_KEY = settings.BLAND_API_KEY
+#     url = f"https://api.bland.ai/v1/recordings/{call_id}"
+#     headers = {
+#         "authorization": f"Bearer {BLAND_API_KEY}",
+#         "content-type": "audio/wav"  # Or "audio/mpeg" for MP3
+#     }
 
-def get_call_recording_from_id(call_id):
-    bland_api_key = settings.BLAND_API_KEY
-    headers = {
-        "authorization": f" {bland_api_key}"
-        }
-    response = requests.get(f"https://api.bland.ai/v1/recordings/{call_id}",headers=headers)
-    print(response.data)
-    return response.data
+#     bland_response = requests.get(url, headers=headers, stream=True)
+
+#     if bland_response.status_code != 200:
+#         raise HTTPException(status_code=bland_response.status_code, detail="Failed to retrieve recording from Bland")
+
+#     content_type = bland_response.headers.get("Content-Type", "")
+
+#     # Handle unexpected JSON error response
+#     if "application/json" in content_type:
+#         try:
+#             error_data = bland_response.json()
+#             raise HTTPException(
+#                 status_code=400,
+#                 detail=f"Bland API error: {error_data.get('errors') or 'Unknown error'}"
+#             )
+#         except Exception:
+#             raise HTTPException(status_code=500, detail="Invalid JSON in error response from Bland")
+
+#     # Return audio response
+#     return Response(
+#         content=bland_response.content,
+#         media_type=content_type or "audio/wav"
+#     )
+
+
+def get_call_recording_by_id(call_id,db):
+    recording_url = get_recording_url(call_id,db)
+    print(recording_url)
+    return {'recording_url':recording_url}
+
 
 async def campaigns_of_userID(user_id,db):
     campaigns = campaigns_by_userID(user_id,db)

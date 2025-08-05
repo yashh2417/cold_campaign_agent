@@ -3,7 +3,8 @@ from fastapi import HTTPException
 import requests
 from app.core.database import logger
 from app.crud.update import (
-    soft_delete_contact
+    soft_delete_contact_for_user,
+    soft_delete_contact_for_campaign
 )
 
 
@@ -114,6 +115,13 @@ def stop_active_call_from_id(call_id):
     return response
 
 def delete_contact(contact_id,db):
-    soft_delete_contact(contact_id,db)
+    soft_delete_contact_for_user(contact_id,db)
     return {"contact_id":contact_id,
             "is_active":False}
+
+def remove_toggled_contacts(data,user_id,db):
+    campaign_thread_id = str(data.campaign_thread_id)
+    for contact_id in data.toggled_off:
+        soft_delete_contact_for_campaign(campaign_thread_id,str(contact_id),user_id,db)
+    
+    return {'status':'success','toggled_off':data.toggled_off}

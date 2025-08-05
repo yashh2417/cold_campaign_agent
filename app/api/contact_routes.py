@@ -10,7 +10,8 @@ from app.schemas.contacts import (
     CreateContact
 )
 from app.schemas.contacts import (
-    EditContactForm
+    EditContactForm,
+    ToggleContacts
 )
 
 from app.services.create import (
@@ -20,7 +21,8 @@ from app.services.edit import (
     contact_edit
 )
 from app.services.stop_delete import (
-    delete_contact
+    delete_contact,
+    remove_toggled_contacts
 )
 from app.services.get_services import (
     get_all_contacts
@@ -33,6 +35,10 @@ router = APIRouter(tags=["contacts"])
 def get_contacts(user = Depends(get_current_user),db:Session = Depends(get_db)):
     return get_all_contacts(user.user_id,db)
 
+
+@router.post('/contacts/toggle-contacts')
+def toggle_contacts(data:ToggleContacts,user = Depends(get_current_user),db:Session = Depends(get_db)):
+    return remove_toggled_contacts(data,user.user_id,db)
 
 @router.post("/contacts/create")
 def create_contact(contact_data:CreateContact,db:Session = Depends(get_db),user = Depends(get_current_user)):

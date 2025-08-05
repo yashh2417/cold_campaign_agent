@@ -6,9 +6,13 @@ from app.core.config import settings
 from app.services.utils import llm_generate_data,format_datetime
 import requests
 from app.services.utils import serialize_datetimes
-from app.crud.get_data import get_contact_from_contactID
+from app.crud.get_data import (
+    get_contact_from_contactID,
+    get_userdata_by_userID
+    )
 from app.schemas.contacts import CreateContactTable
 from app.schemas.call import (
+    SendCallRequest,
     BatchCallRequest,
     RequestData,
     GlobalBatch,
@@ -39,23 +43,21 @@ async def create_single_call(request):
         payload = {
             "phone_number": request.to_phone,
             "ivr_mode":request.ivr_mode,
-            "voice_id":request.voice_id,
             'reduce_latency':request.reduce_latency,
-            "request_data":request.request_data,
+            "request_data":request.request_data.model_dump(),
             "record":request.record,
             "webhook":request.webhook,
-            "metadata":request.request_data
+            "metadata":request.request_data.model_dump()
         }
 
-        # Optional fields
-        if request.pathway_id != None:
-            payload['pathway_id'] = request.pathway_id
         if request.start_time:
-            payload["start_time"] = request.start_time
+            payload["start_time"] = str(format_datetime(str(request.start_time)))
         if request.request_data :
-            payload["request_data"] = request.request_data
+            payload["request_data"] = request.request_data.model_dump()
         if request.metadata:
             payload["metadata"] = request.metadata
+            if payload["metadata"].get('agent_voice',None):
+                payload['voice'] = payload["metadata"].get('agent_voice',None)
         if request.task:
             payload["task"] = request.task
 
@@ -105,18 +107,21 @@ async def create_batch_call(request):
         }
 
         global_payload = {
-            "start_time":str(format_datetime(str(request.global_keyword.start_time))),
+            "voice":request.global_keyword.voice,
             "task": request.global_keyword.task,
             "record":request.global_keyword.record,
             "webhook":request.global_keyword.webhook
         }
         
+        if request.global_keyword.start_time:
+            global_payload['start_time'] = request.global_keyword.start_time
 
         call_objs = request.call_objects
         payload = {
         "global": global_payload,
         "call_objects": [
         {
+            "voice":call.metadata.get('agent_voice',None),
             "phone_number": call.to_phone,
             "request_data": call.request_data.model_dump(),  
             "ivr_mode": call.ivr_mode,
@@ -204,7 +209,7 @@ async def create_campaign_batch(user_id,data,db):
                     "customer_name":str(request_data_form.customer_name),
                     "cust_email": str(request_data_form.cust_email),
                     
-                    "start_time": str(form_data.campaign_start_date),
+                    "start_time": str(form_data.campaign_start_date) if form_data.campaign_start_date else False,
                     "end_time": str(form_data.campaign_end_date),
                     
                     "task":"You are a professional, warm, and articulate AI {{agent_role}} named {{agent_name}}, calling on behalf of {{business_name}}.\n\nContext:\n{{business_description}}\n\nTask Objective:\n{{task_description}}\n\nCustomer Info:\nName: {{customer_name}}\nEmail: {{cust_email}}\n\nGoal:\nConduct a friendly, human-like phone conversation with {{customer_name}}. Present the business offering in a helpful way, and if interested, offer to send information to {{cust_email}}. If the customer is busy or unavailable, politely ask for a better time to call back and confirm availability.\n\nGuidelines:\n- Speak slowly, clearly, and warmly.\n- Begin by introducing yourself as John, the AI assistant calling on behalf of {{business_name}}.\n- Ask if you’re speaking with {{customer_name}}.\n- Be brief but engaging when explaining the service — no long monologues.\n- Pause after each key sentence to let the customer respond.\n- Always check if they’re available to talk before continuing.\n- Ask if they’d like to receive more information via email.\n- If they’re not interested or unavailable, be respectful and offer to follow up later.\n- End the conversation politely and thank them for their time.\n\nExample Flow:\nYou: Hi, is this {{customer_name}}?\n\nCustomer: Yes, speaking.\n\nYou: Great! I'm John, an AI assistant calling on behalf of {{business_name}}. We help people like you by [brief value proposition from {{business_description}}]. Is this a good time to talk?\n\n[Wait for response.]\n\nYou: No worries if you're busy. Would you prefer I call at another time? Or I can email you more information at {{cust_email}} if that’s easier.\n\n[Adjust based on customer response.]\n\nYou: Thank you, {{customer_name}}! I appreciate your time. Have a wonderful day."
@@ -218,7 +223,8 @@ async def create_campaign_batch(user_id,data,db):
         message=form_data.voicemail_message if form_data.voicemail_setting else ""
     )
     global_keys = GlobalBatch(
-        start_time=form_data.campaign_start_date,
+        voice=str(form_data.agent_voice),
+        start_time=form_data.campaign_start_date if form_data.campaign_start_date else None ,
         record=form_data.call_recording,
         language=form_data.language,
         voicemail=voicemail_data ,
@@ -231,62 +237,51 @@ async def create_campaign_batch(user_id,data,db):
     return {"data":batch_payload,"user_id":user_id}
 
 
-
-async def make_test_call(user_id,data,db):
-    form_data = data.form_data
-    contacts = data.contacts
+async def make_test_call(user_id,form_data,db):
     
-    print(form_data)
-    print(contacts)
-    call_objs = []
-    for contact_id in contacts:
-        contact = get_contact_from_contactID(contact_id,db)
-        contact = (CreateContactTable.model_validate(contact)).model_dump()
-        print(contact)
-        request_data_form = RequestData(
-            agent_name=form_data.agent_name,
-            agent_role=form_data.agent_role,
-            business_description=form_data.business_description,
-            business_name=form_data.business_name,
-            task_description=form_data.task,
-            cust_email=contact['email'],
-            customer_name=contact['contact_name']
-        )
-        batch_item = BatchCallItemRequest(
-            to_phone=contact['phone_number'],
-            request_data=request_data_form,
-            metadata={
-                    "user_id":str(user_id),
-                    "changes":"{}",
-                    "agent_name":str(request_data_form.agent_name),
-                    "agent_role":str(request_data_form.agent_role),
-                    "contact_id":str(contact['contact_id']),
-                    "business_name": str(request_data_form.business_name),
-                    "business_description": str(request_data_form.business_description),
-                    "task_description": str(request_data_form.task_description),
-                    "customer_name":str(request_data_form.customer_name),
-                    "cust_email": str(request_data_form.cust_email),
-                    "start_time": str(form_data.campaign_start_date),
-                    "end_time": str(form_data.campaign_end_date),
-                    "task":"You are a professional, warm, and articulate AI {{agent_role}} named {{agent_name}}, calling on behalf of {{business_name}}.\n\nContext:\n{{business_description}}\n\nTask Objective:\n{{task_description}}\n\nCustomer Info:\nName: {{customer_name}}\nEmail: {{cust_email}}\n\nGoal:\nConduct a friendly, human-like phone conversation with {{customer_name}}. Present the business offering in a helpful way, and if interested, offer to send information to {{cust_email}}. If the customer is busy or unavailable, politely ask for a better time to call back and confirm availability.\n\nGuidelines:\n- Speak slowly, clearly, and warmly.\n- Begin by introducing yourself as John, the AI assistant calling on behalf of {{business_name}}.\n- Ask if you’re speaking with {{customer_name}}.\n- Be brief but engaging when explaining the service — no long monologues.\n- Pause after each key sentence to let the customer respond.\n- Always check if they’re available to talk before continuing.\n- Ask if they’d like to receive more information via email.\n- If they’re not interested or unavailable, be respectful and offer to follow up later.\n- End the conversation politely and thank them for their time.\n\nExample Flow:\nYou: Hi, is this {{customer_name}}?\n\nCustomer: Yes, speaking.\n\nYou: Great! I'm John, an AI assistant calling on behalf of {{business_name}}. We help people like you by [brief value proposition from {{business_description}}]. Is this a good time to talk?\n\n[Wait for response.]\n\nYou: No worries if you're busy. Would you prefer I call at another time? Or I can email you more information at {{cust_email}} if that’s easier.\n\n[Adjust based on customer response.]\n\nYou: Thank you, {{customer_name}}! I appreciate your time. Have a wonderful day."
-                    }
+    user_data = get_userdata_by_userID(user_id,db)
 
-        )
-        call_objs.append(batch_item)
-
+    request_data_form = RequestData(
+        agent_name=form_data.agent_name,
+        agent_role=form_data.agent_role,
+        business_description=form_data.business_description,
+        business_name=form_data.business_name,
+        task_description=form_data.task,
+        cust_email=user_data.email,
+        customer_name=user_data.name
+    )
     voicemail_data = VoiceMail(
         action="leave_message" if form_data.voicemail_setting else "hangup",
         message=form_data.voicemail_message if form_data.voicemail_setting else ""
     )
-    global_keys = GlobalBatch(
-        start_time=form_data.campaign_start_date,
+    call_payload = SendCallRequest(
+        webhook=settings.WEBHOOK_URL,
+        to_phone=user_data.phone_number,
+        request_data=request_data_form,
+        metadata={
+                "agent_voice":str(form_data.agent_voice),
+                "user_id":str(user_id),
+                "changes":"{}",
+                "agent_name":str(request_data_form.agent_name),
+                "agent_role":str(request_data_form.agent_role),
+                "contact_id":str(0),
+                "business_name": str(request_data_form.business_name),
+                "business_description": str(request_data_form.business_description),
+                "task_description": str(request_data_form.task_description),
+                "customer_name":str(user_data.name),
+                "cust_email": str(user_data.email),
+                
+                "task":"You are a professional, warm, and articulate AI {{agent_role}} named {{agent_name}}, calling on behalf of {{business_name}}.\n\nContext:\n{{business_description}}\n\nTask Objective:\n{{task_description}}\n\nCustomer Info:\nName: {{customer_name}}\nEmail: {{cust_email}}\n\nGoal:\nConduct a friendly, human-like phone conversation with {{customer_name}}. Present the business offering in a helpful way, and if interested, offer to send information to {{cust_email}}. If the customer is busy or unavailable, politely ask for a better time to call back and confirm availability.\n\nGuidelines:\n- Speak slowly, clearly, and warmly.\n- Begin by introducing yourself as John, the AI assistant calling on behalf of {{business_name}}.\n- Ask if you’re speaking with {{customer_name}}.\n- Be brief but engaging when explaining the service — no long monologues.\n- Pause after each key sentence to let the customer respond.\n- Always check if they’re available to talk before continuing.\n- Ask if they’d like to receive more information via email.\n- If they’re not interested or unavailable, be respectful and offer to follow up later.\n- End the conversation politely and thank them for their time.\n\nExample Flow:\nYou: Hi, is this {{customer_name}}?\n\nCustomer: Yes, speaking.\n\nYou: Great! I'm John, an AI assistant calling on behalf of {{business_name}}. We help people like you by [brief value proposition from {{business_description}}]. Is this a good time to talk?\n\n[Wait for response.]\n\nYou: No worries if you're busy. Would you prefer I call at another time? Or I can email you more information at {{cust_email}} if that’s easier.\n\n[Adjust based on customer response.]\n\nYou: Thank you, {{customer_name}}! I appreciate your time. Have a wonderful day."
+                },
         record=form_data.call_recording,
         language=form_data.language,
         voicemail=voicemail_data ,
-        task="You are a professional, warm, and articulate AI {{agent_role}} named {{agent_name}}, calling on behalf of {{business_name}}.\n\nContext:\n{{business_description}}\n\nTask Objective:\n{{task_description}}\n\nCustomer Info:\nName: {{customer_name}}\nEmail: {{cust_email}}\n\nGoal:\nConduct a friendly, human-like phone conversation with {{customer_name}}. Present the business offering in a helpful way, and if interested, offer to send information to {{cust_email}}. If the customer is busy or unavailable, politely ask for a better time to call back and confirm availability.\n\nGuidelines:\n- Speak slowly, clearly, and warmly.\n- Begin by introducing yourself as John, the AI assistant calling on behalf of {{business_name}}.\n- Ask if you’re speaking with {{customer_name}}.\n- Be brief but engaging when explaining the service — no long monologues.\n- Pause after each key sentence to let the customer respond.\n- Always check if they’re available to talk before continuing.\n- Ask if they’d like to receive more information via email.\n- If they’re not interested or unavailable, be respectful and offer to follow up later.\n- End the conversation politely and thank them for their time.\n\nExample Flow:\nYou: Hi, is this {{customer_name}}?\n\nCustomer: Yes, speaking.\n\nYou: Great! I'm John, an AI assistant calling on behalf of {{business_name}}. We help people like you by [brief value proposition from {{business_description}}]. Is this a good time to talk?\n\n[Wait for response.]\n\nYou: No worries if you're busy. Would you prefer I call at another time? Or I can email you more information at {{cust_email}} if that’s easier.\n\n[Adjust based on customer response.]\n\nYou: Thank you, {{customer_name}}! I appreciate your time. Have a wonderful day."
-    )
-    batch_payload = BatchCallRequest(call_objects=call_objs,
-                     global_keyword=global_keys)
-    print(batch_payload.model_dump())
-    await create_batch_call(batch_payload)
-    return {"data":batch_payload,"user_id":user_id}
+        task = "You are a professional, warm, and articulate AI {{agent_role}} named {{agent_name}}, calling on behalf of {{business_name}}.\n\nContext:\n{{business_description}}\n\nTask Objective:\n{{task_description}}\n\nCustomer Info:\nName: {{customer_name}}\nEmail: {{cust_email}}\n\nGoal:\nConduct a friendly, human-like phone conversation with {{customer_name}}. Present the business offering in a helpful way, and if interested, offer to send information to {{cust_email}}. If the customer is busy or unavailable, politely ask for a better time to call back and confirm availability.\n\nGuidelines:\n- Speak slowly, clearly, and warmly.\n- Begin by introducing yourself as John, the AI assistant calling on behalf of {{business_name}}.\n- Ask if you’re speaking with {{customer_name}}.\n- Be brief but engaging when explaining the service — no long monologues.\n- Pause after each key sentence to let the customer respond.\n- Always check if they’re available to talk before continuing.\n- Ask if they’d like to receive more information via email.\n- If they’re not interested or unavailable, be respectful and offer to follow up later.\n- End the conversation politely and thank them for their time.\n\nExample Flow:\nYou: Hi, is this {{customer_name}}?\n\nCustomer: Yes, speaking.\n\nYou: Great! I'm John, an AI assistant calling on behalf of {{business_name}}. We help people like you by [brief value proposition from {{business_description}}]. Is this a good time to talk?\n\n[Wait for response.]\n\nYou: No worries if you're busy. Would you prefer I call at another time? Or I can email you more information at {{cust_email}} if that’s easier.\n\n[Adjust based on customer response.]\n\nYou: Thank you, {{customer_name}}! I appreciate your time. Have a wonderful day."
+        )
+        
+    call_payload_json = call_payload.model_dump()
+    print(call_payload_json)
+
+    await create_single_call(call_payload)
+    # await create_batch_call(batch_payload)
+    return {"data":call_payload_json,"user_id":user_id}

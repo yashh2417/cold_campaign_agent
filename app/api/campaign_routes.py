@@ -37,9 +37,9 @@ async def get_active_campaigns_by_userID(user=Depends(get_current_user),db:Sessi
 async def get_campaign_contacts(campaign_thread_id:str,db:Session = Depends(get_db)):
     return await contacts_of_campaigns(campaign_thread_id,db)
 
-@router.get('/campaign/{campaign_thread_id}/add-contacts')
-async def add_campaign_contacts(campaign_thread_id:str,db:Session = Depends(get_db)):
-    return await campaign_add_contacts(campaign_thread_id,db)
+# @router.get('/campaign/{campaign_thread_id}/add-contacts')
+# async def add_campaign_contacts(campaign_thread_id:str,db:Session = Depends(get_db)):
+#     return await campaign_add_contacts(campaign_thread_id,db)
 
 @router.post('/campaign/create')
 async def create_campaign(data:CreateCampaignFormMain,db:Session = Depends(get_db),user=Depends(get_current_user)):
