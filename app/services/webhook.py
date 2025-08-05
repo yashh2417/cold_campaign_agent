@@ -156,11 +156,11 @@ async def get_postcall_data(request: Request, db: Session):
                 task=metadata.get('task'),
                 
                 created_at=parse_datetime_safe(created_at_str),
-                is_call_scheduled=analysis_answers[2] if len(analysis_answers) > 2 else None,
-                timezone=analysis_answers[4] if len(analysis_answers) > 4 else None,
+                is_call_scheduled=analysis_answers[1] if len(analysis_answers) > 2 else None,
+                timezone=analysis_answers[3] if len(analysis_answers) > 4 else None,
                 scheduled_call_datetime=parse_datetime_safe(scheduled_call_str) if scheduled_call_str and scheduled_call_str != 'None' else None,
                 
-                emotion=analysis_answers[1] if len(analysis_answers) > 1 else None,
+                emotion=analysis_answers[0] if len(analysis_answers) > 1 else None,
                 status=data.get('status', 'error'),
                 summary=summary,
                 
