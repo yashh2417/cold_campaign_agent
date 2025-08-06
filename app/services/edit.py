@@ -79,27 +79,21 @@ async def changeCampaign(user_id,batch_id,form_data,db):
         )
         call_dict["request_data"] = req_data
         call_dict["metadata"] = {
-                                    "user_id":str(user_id),
-                                    "contact_id":contact_data.contact_id,
-                                    "campaign_thread_id":campaign_thread_id,
-
-                                    "changes":campaign_data,
-
-                                    "agent_name":campaign_data["agent_name"],
-                                    "agent_role":campaign_data["agent_role"],
-                                    
-                                    "business_name": campaign_data['business_name'],
-                                    "business_description": campaign_data['business_description'],
-                                    "task_description": campaign_data['task'],
-
-                                    "customer_name":contact_name,
-                                    "cust_email": contact_mail,
-
-                                    "start_time": datetime.now(timezone.utc) +timedelta(minutes=30),
-                                    "end_time":datetime.now(timezone.utc) +timedelta(minutes=30),
-                                    
-                                    "task":"You are a professional, warm, and articulate AI {{agent_role}} named {{agent_name}}, calling on behalf of {{business_name}}.\n\nContext:\n{{business_description}}\n\nTask Objective:\n{{task_description}}\n\nCustomer Info:\nName: {{customer_name}}\nEmail: {{cust_email}}\n\nGoal:\nConduct a friendly, human-like phone conversation with {{customer_name}}. Present the business offering in a helpful way, and if interested, offer to send information to {{cust_email}}. If the customer is busy or unavailable, politely ask for a better time to call back and confirm availability.\n\nGuidelines:\n- Speak slowly, clearly, and warmly.\n- Begin by introducing yourself as John, the AI assistant calling on behalf of {{business_name}}.\n- Ask if you’re speaking with {{customer_name}}.\n- Be brief but engaging when explaining the service — no long monologues.\n- Pause after each key sentence to let the customer respond.\n- Always check if they’re available to talk before continuing.\n- Ask if they’d like to receive more information via email.\n- If they’re not interested or unavailable, be respectful and offer to follow up later.\n- End the conversation politely and thank them for their time.\n\nExample Flow:\nYou: Hi, is this {{customer_name}}?\n\nCustomer: Yes, speaking.\n\nYou: Great! I'm John, an AI assistant calling on behalf of {{business_name}}. We help people like you by [brief value proposition from {{business_description}}]. Is this a good time to talk?\n\n[Wait for response.]\n\nYou: No worries if you're busy. Would you prefer I call at another time? Or I can email you more information at {{cust_email}} if that’s easier.\n\n[Adjust based on customer response.]\n\nYou: Thank you, {{customer_name}}! I appreciate your time. Have a wonderful day."
-                                }
+            "user_id": str(user_id),
+            "contact_id": str(contact_data.contact_id),
+            "campaign_thread_id": str(campaign_thread_id),
+            "changes": json.dumps(campaign_data),  # Convert dictionary to a JSON string
+            "agent_name": str(campaign_data["agent_name"]),
+            "agent_role": str(campaign_data["agent_role"]),
+            "business_name": str(campaign_data['business_name']),
+            "business_description": str(campaign_data['business_description']),
+            "task_description": str(campaign_data['task']),
+            "customer_name": str(contact_name),
+            "cust_email": str(contact_mail),
+            "start_time": str(datetime.now(timezone.utc) + timedelta(minutes=30)), # Convert datetime to string
+            "end_time": str(datetime.now(timezone.utc) + timedelta(minutes=30)),   # Convert datetime to string
+            "task": "You are a professional, warm, and articulate AI..." # Task string remains the same
+        }
         batch_payload['call_objects'].append(call_dict)
     
     batch_payload['global_keyword'] = {
