@@ -1,3 +1,4 @@
+import json
 from app.crud.create_db import create_new_contact_db
 from app.core.database import logger
 from fastapi import Request, HTTPException
@@ -92,6 +93,76 @@ async def create_single_call(request):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+# async def create_batch_call(request):
+#     """Send batch AI phone calls"""
+#     try:
+#         url = "https://api.bland.ai/v2/batches/create"
+#         bland_api_key = settings.BLAND_API_KEY
+        
+#         if not bland_api_key:
+#             raise HTTPException(status_code=500, detail="BLAND_API_KEY not configured")
+        
+#         headers = {
+#             "Authorization": f"Bearer {bland_api_key}",
+#             "Content-Type": "application/json"
+#         }
+
+#         global_payload = {
+#             "task": request.global_keyword.task,
+#             "record":request.global_keyword.record,
+#             "webhook":request.global_keyword.webhook
+#         }
+        
+#         if request.global_keyword.start_time:
+#             global_payload['start_time'] = request.global_keyword.start_time
+
+#         call_objs = request.call_objects
+#         payload = {
+#         "global": global_payload,
+#         "call_objects": [
+#         {
+#             "voice":call.metadata.get('agent_voice','maya'),
+#             "phone_number": call.to_phone,
+#             "request_data": call.request_data.model_dump(),  
+#             "ivr_mode": call.ivr_mode,
+#             "voice_id": call.voice_id,
+#             "reduce_latency": call.reduce_latency,
+#             "metadata": call.metadata  
+#         }
+#         for call in call_objs]
+#         }
+
+
+#         logger.info(f"📞 Sending batch of {len(call_objs)} calls")
+#         payload = serialize_datetimes(payload)
+#         print(payload)
+#         response = requests.post(url, json=payload, headers=headers, timeout=60)
+#         response.raise_for_status()
+        
+#         result = response.json()
+#         logger.info(f"✅ Batch sent successfully: {result}")
+        
+#         return result
+
+#     except requests.exceptions.HTTPError as http_err:
+#         logger.error(f"❌ HTTP error: {http_err}")
+#         error_detail = f"HTTP error occurred: {http_err}"
+#         if hasattr(http_err, 'response') and http_err.response:
+#             error_detail += f" - {http_err.response.text}"
+#         raise HTTPException(status_code=400, detail=error_detail)
+    
+#     except requests.exceptions.Timeout:
+#         logger.error("❌ Request timeout")
+#         raise HTTPException(status_code=408, detail="Request timeout")
+    
+#     except requests.exceptions.RequestException as e:
+#         logger.error(f"❌ Request error: {e}")
+#         raise HTTPException(status_code=500, detail="Failed to send batch")
+    
+#     except Exception as e:
+#         logger.error(f"❌ Unexpected error: {e}")
+#         raise HTTPException(status_code=500, detail="Internal server error")
+
 async def create_batch_call(request):
     """Send batch AI phone calls"""
     try:
@@ -106,37 +177,74 @@ async def create_batch_call(request):
             "Content-Type": "application/json"
         }
 
+        # FIX: Build global payload properly
         global_payload = {
             "task": request.global_keyword.task,
-            "record":request.global_keyword.record,
-            "webhook":request.global_keyword.webhook
+            "record": request.global_keyword.record,
+            "webhook": request.global_keyword.webhook,
+            "language": request.global_keyword.language
         }
         
+        # FIX: Handle start_time properly
         if request.global_keyword.start_time:
-            global_payload['start_time'] = request.global_keyword.start_time
+            # Convert datetime to string if it's a datetime object
+            if isinstance(request.global_keyword.start_time, datetime):
+                global_payload['start_time'] = request.global_keyword.start_time.isoformat()
+            else:
+                global_payload['start_time'] = str(request.global_keyword.start_time)
+
+        # FIX: Handle voicemail properly
+        if request.global_keyword.voicemail:
+            global_payload['voicemail'] = {
+                "message": request.global_keyword.voicemail.message or "",
+                "action": request.global_keyword.voicemail.action or "hangup"
+            }
 
         call_objs = request.call_objects
-        payload = {
-        "global": global_payload,
-        "call_objects": [
-        {
-            "voice":call.metadata.get('agent_voice','maya'),
-            "phone_number": call.to_phone,
-            "request_data": call.request_data.model_dump(),  
-            "ivr_mode": call.ivr_mode,
-            "voice_id": call.voice_id,
-            "reduce_latency": call.reduce_latency,
-            "metadata": call.metadata  
-        }
-        for call in call_objs]
-        }
+        
+        # FIX: Build call objects with proper structure
+        call_objects_payload = []
+        for call in call_objs:
+            call_obj = {
+                "phone_number": call.to_phone,
+                "ivr_mode": call.ivr_mode,
+                "voice_id": call.voice_id,
+                "reduce_latency": call.reduce_latency
+            }
+            
+            # Add request_data if available
+            if call.request_data:
+                call_obj["request_data"] = call.request_data.model_dump()
+            
+            # Add metadata if available
+            if call.metadata:
+                call_obj["metadata"] = call.metadata
+                # Set voice from metadata if available
+                if call.metadata.get('agent_voice'):
+                    call_obj["voice"] = call.metadata.get('agent_voice')
+            
+            call_objects_payload.append(call_obj)
 
+        payload = {
+            "global": global_payload,
+            "call_objects": call_objects_payload
+        }
 
         logger.info(f"📞 Sending batch of {len(call_objs)} calls")
+        logger.info(f"Payload: {json.dumps(payload, indent=2, default=str)}")
+        
+        # Serialize datetimes
         payload = serialize_datetimes(payload)
-        print(payload)
+        
         response = requests.post(url, json=payload, headers=headers, timeout=60)
-        response.raise_for_status()
+        
+        # FIX: Better error handling
+        if response.status_code != 200:
+            logger.error(f"❌ Bland API Error: {response.status_code} - {response.text}")
+            raise HTTPException(
+                status_code=response.status_code, 
+                detail=f"Bland API error: {response.text}"
+            )
         
         result = response.json()
         logger.info(f"✅ Batch sent successfully: {result}")
