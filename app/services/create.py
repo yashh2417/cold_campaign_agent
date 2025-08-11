@@ -3,23 +3,24 @@ from app.crud.create_db import create_new_contact_db
 from app.core.database import logger
 from fastapi import Request, HTTPException
 import requests
+import httpx 
 from app.core.config import settings
 from app.services.utils import llm_generate_data,format_datetime
 import requests
-from app.services.utils import serialize_datetimes
+from app.services.utils import serialize_datetimes 
 from app.crud.get_data import (
     get_contact_from_contactID,
     get_userdata_by_userID
     )
 from app.schemas.contacts import CreateContactTable
 from app.schemas.call import (
-    SendCallRequest,
     BatchCallRequest,
     RequestData,
     GlobalBatch,
     VoiceMail,
-    BatchCallItemRequest
-    )
+    BatchCallItemRequest,
+    SendCallRequest
+)
 from datetime import datetime, timedelta,timezone
 
 def create_new_contact(user_id,contact_data,db):
@@ -65,7 +66,8 @@ async def create_single_call(request):
 
         logger.info(f"📞 Sending call to {request.to_phone}")
         logger.info(f"Giving call payload {payload}")
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=payload, headers=headers, timeout=30)
         response.raise_for_status()
 
         result = response.json()
@@ -93,76 +95,6 @@ async def create_single_call(request):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-# async def create_batch_call(request):
-#     """Send batch AI phone calls"""
-#     try:
-#         url = "https://api.bland.ai/v2/batches/create"
-#         bland_api_key = settings.BLAND_API_KEY
-        
-#         if not bland_api_key:
-#             raise HTTPException(status_code=500, detail="BLAND_API_KEY not configured")
-        
-#         headers = {
-#             "Authorization": f"Bearer {bland_api_key}",
-#             "Content-Type": "application/json"
-#         }
-
-#         global_payload = {
-#             "task": request.global_keyword.task,
-#             "record":request.global_keyword.record,
-#             "webhook":request.global_keyword.webhook
-#         }
-        
-#         if request.global_keyword.start_time:
-#             global_payload['start_time'] = request.global_keyword.start_time
-
-#         call_objs = request.call_objects
-#         payload = {
-#         "global": global_payload,
-#         "call_objects": [
-#         {
-#             "voice":call.metadata.get('agent_voice','maya'),
-#             "phone_number": call.to_phone,
-#             "request_data": call.request_data.model_dump(),  
-#             "ivr_mode": call.ivr_mode,
-#             "voice_id": call.voice_id,
-#             "reduce_latency": call.reduce_latency,
-#             "metadata": call.metadata  
-#         }
-#         for call in call_objs]
-#         }
-
-
-#         logger.info(f"📞 Sending batch of {len(call_objs)} calls")
-#         payload = serialize_datetimes(payload)
-#         print(payload)
-#         response = requests.post(url, json=payload, headers=headers, timeout=60)
-#         response.raise_for_status()
-        
-#         result = response.json()
-#         logger.info(f"✅ Batch sent successfully: {result}")
-        
-#         return result
-
-#     except requests.exceptions.HTTPError as http_err:
-#         logger.error(f"❌ HTTP error: {http_err}")
-#         error_detail = f"HTTP error occurred: {http_err}"
-#         if hasattr(http_err, 'response') and http_err.response:
-#             error_detail += f" - {http_err.response.text}"
-#         raise HTTPException(status_code=400, detail=error_detail)
-    
-#     except requests.exceptions.Timeout:
-#         logger.error("❌ Request timeout")
-#         raise HTTPException(status_code=408, detail="Request timeout")
-    
-#     except requests.exceptions.RequestException as e:
-#         logger.error(f"❌ Request error: {e}")
-#         raise HTTPException(status_code=500, detail="Failed to send batch")
-    
-#     except Exception as e:
-#         logger.error(f"❌ Unexpected error: {e}")
-#         raise HTTPException(status_code=500, detail="Internal server error")
-
 async def create_batch_call(request):
     """Send batch AI phone calls"""
     try:
@@ -177,98 +109,37 @@ async def create_batch_call(request):
             "Content-Type": "application/json"
         }
 
-        # FIX: Build global payload properly
-        global_payload = {
-            "task": request.global_keyword.task,
-            "record": request.global_keyword.record,
-            "webhook": request.global_keyword.webhook,
-            "language": request.global_keyword.language
-        }
-        
-        # FIX: Handle start_time properly
-        if request.global_keyword.start_time:
-            # Convert datetime to string if it's a datetime object
-            if isinstance(request.global_keyword.start_time, datetime):
-                global_payload['start_time'] = request.global_keyword.start_time.isoformat()
-            else:
-                global_payload['start_time'] = str(request.global_keyword.start_time)
+        payload = request.model_dump(by_alias=True, exclude_none=True)
 
-        # FIX: Handle voicemail properly
-        if request.global_keyword.voicemail:
-            global_payload['voicemail'] = {
-                "message": request.global_keyword.voicemail.message or "",
-                "action": request.global_keyword.voicemail.action or "hangup"
-            }
-
-        call_objs = request.call_objects
-        
-        # FIX: Build call objects with proper structure
-        call_objects_payload = []
-        for call in call_objs:
-            call_obj = {
-                "phone_number": call.to_phone,
-                "ivr_mode": call.ivr_mode,
-                "voice_id": call.voice_id,
-                "reduce_latency": call.reduce_latency
-            }
-            
-            # Add request_data if available
-            if call.request_data:
-                call_obj["request_data"] = call.request_data.model_dump()
-            
-            # Add metadata if available
-            if call.metadata:
-                call_obj["metadata"] = call.metadata
-                # Set voice from metadata if available
-                if call.metadata.get('agent_voice'):
-                    call_obj["voice"] = call.metadata.get('agent_voice')
-            
-            call_objects_payload.append(call_obj)
-
-        payload = {
-            "global": global_payload,
-            "call_objects": call_objects_payload
-        }
-
-        logger.info(f"📞 Sending batch of {len(call_objs)} calls")
-        logger.info(f"Payload: {json.dumps(payload, indent=2, default=str)}")
-        
         # Serialize datetimes
-        payload = serialize_datetimes(payload)
+        serialized_payload = serialize_datetimes(payload)
+
+        logger.info(f"📞 Sending batch of {len(serialized_payload.get('call_objects', []))} calls")
+        logger.info(f"Payload: {json.dumps(serialized_payload, indent=2)}")
         
-        response = requests.post(url, json=payload, headers=headers, timeout=60)
         
-        # FIX: Better error handling
-        if response.status_code != 200:
-            logger.error(f"❌ Bland API Error: {response.status_code} - {response.text}")
-            raise HTTPException(
-                status_code=response.status_code, 
-                detail=f"Bland API error: {response.text}"
-            )
+        # Use httpx for async request
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=serialized_payload, headers=headers, timeout=60)
+        
+        response.raise_for_status()
         
         result = response.json()
         logger.info(f"✅ Batch sent successfully: {result}")
         
         return result
+    
 
-    except requests.exceptions.HTTPError as http_err:
-        logger.error(f"❌ HTTP error: {http_err}")
-        error_detail = f"HTTP error occurred: {http_err}"
-        if hasattr(http_err, 'response') and http_err.response:
-            error_detail += f" - {http_err.response.text}"
-        raise HTTPException(status_code=400, detail=error_detail)
-    
-    except requests.exceptions.Timeout:
-        logger.error("❌ Request timeout")
-        raise HTTPException(status_code=408, detail="Request timeout")
-    
-    except requests.exceptions.RequestException as e:
-        logger.error(f"❌ Request error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to send batch")
+    except httpx.HTTPStatusError as http_err:
+        logger.error(f"❌ Bland API Error: {http_err.response.status_code} - {http_err.response.text}")
+        raise HTTPException(
+            status_code=http_err.response.status_code, 
+            detail=f"Bland API error: {http_err.response.text}"
+        )
     
     except Exception as e:
         logger.error(f"❌ Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 async def create_campaign_batch(user_id,data,db):
@@ -278,8 +149,8 @@ async def create_campaign_batch(user_id,data,db):
     print(contacts)
     call_objs = []
     for contact_id in contacts:
-        contact = get_contact_from_contactID(contact_id,db)
-        contact = (CreateContactTable.model_validate(contact)).model_dump()
+        contact = get_contact_from_contactID(contact_id, db)
+        contact_dict = (CreateContactTable.model_validate(contact)).model_dump()
         print(contact)
         request_data_form = RequestData(
             agent_name=form_data.agent_name,
@@ -287,15 +158,15 @@ async def create_campaign_batch(user_id,data,db):
             business_description=form_data.business_description,
             business_name=form_data.business_name,
             task_description=form_data.task,
-            cust_email=contact['email'],
-            customer_name=contact['contact_name']
+            customer_name=contact_dict['contact_name'],
+            cust_email=contact_dict['email']
         )
         batch_item = BatchCallItemRequest(
-            to_phone=contact['phone_number'],
+            phone_number=contact_dict['phone_number'], 
             request_data=request_data_form,
             metadata={
-                    "user_id":str(user_id),
-                    "contact_id":str(contact['contact_id']),
+                    "user_id": str(user_id),
+                    "contact_id": str(contact_dict['contact_id']),
 
                     "changes":"{}",
 
@@ -318,8 +189,9 @@ async def create_campaign_batch(user_id,data,db):
 
                     "start_time": str(form_data.campaign_start_date) if form_data.campaign_start_date else False,
                     "end_time": str(form_data.campaign_end_date),
-
-                    "task":"You are a professional, warm, and articulate AI {{agent_role}} named {{agent_name}}, calling on behalf of {{business_name}}.\n\nContext:\n{{business_description}}\n\nTask Objective:\n{{task_description}}\n\nCustomer Info:\nName: {{customer_name}}\nEmail: {{cust_email}}\n\nGoal:\nConduct a friendly, human-like phone conversation with {{customer_name}}. Present the business offering in a helpful way, and if interested, offer to send information to {{cust_email}}. If the customer is busy or unavailable, politely ask for a better time to call back and confirm availability.\n\nGuidelines:\n- Speak slowly, clearly, and warmly.\n- Begin by introducing yourself as John, the AI assistant calling on behalf of {{business_name}}.\n- Ask if you’re speaking with {{customer_name}}.\n- Be brief but engaging when explaining the service — no long monologues.\n- Pause after each key sentence to let the customer respond.\n- Always check if they’re available to talk before continuing.\n- Ask if they’d like to receive more information via email.\n- If they’re not interested or unavailable, be respectful and offer to follow up later.\n- End the conversation politely and thank them for their time.\n\nExample Flow:\nYou: Hi, is this {{customer_name}}?\n\nCustomer: Yes, speaking.\n\nYou: Great! I'm John, an AI assistant calling on behalf of {{business_name}}. We help people like you by [brief value proposition from {{business_description}}]. Is this a good time to talk?\n\n[Wait for response.]\n\nYou: No worries if you're busy. Would you prefer I call at another time? Or I can email you more information at {{cust_email}} if that’s easier.\n\n[Adjust based on customer response.]\n\nYou: Thank you, {{customer_name}}! I appreciate your time. Have a wonderful day."
+                    
+                    "task": str(request_data_form.task_description)
+                    # "task":"You are a professional, warm, and articulate AI {{agent_role}} named {{agent_name}}, calling on behalf of {{business_name}}.\n\nContext:\n{{business_description}}\n\nTask Objective:\n{{task_description}}\n\nCustomer Info:\nName: {{customer_name}}\nEmail: {{cust_email}}\n\nGoal:\nConduct a friendly, human-like phone conversation with {{customer_name}}. Present the business offering in a helpful way, and if interested, offer to send information to {{cust_email}}. If the customer is busy or unavailable, politely ask for a better time to call back and confirm availability.\n\nGuidelines:\n- Speak slowly, clearly, and warmly.\n- Begin by introducing yourself as John, the AI assistant calling on behalf of {{business_name}}.\n- Ask if you’re speaking with {{customer_name}}.\n- Be brief but engaging when explaining the service — no long monologues.\n- Pause after each key sentence to let the customer respond.\n- Always check if they’re available to talk before continuing.\n- Ask if they’d like to receive more information via email.\n- If they’re not interested or unavailable, be respectful and offer to follow up later.\n- End the conversation politely and thank them for their time.\n\nExample Flow:\nYou: Hi, is this {{customer_name}}?\n\nCustomer: Yes, speaking.\n\nYou: Great! I'm John, an AI assistant calling on behalf of {{business_name}}. We help people like you by [brief value proposition from {{business_description}}]. Is this a good time to talk?\n\n[Wait for response.]\n\nYou: No worries if you're busy. Would you prefer I call at another time? Or I can email you more information at {{cust_email}} if that’s easier.\n\n[Adjust based on customer response.]\n\nYou: Thank you, {{customer_name}}! I appreciate your time. Have a wonderful day."
                     }
 
         )
@@ -330,17 +202,22 @@ async def create_campaign_batch(user_id,data,db):
         message=form_data.voicemail_message if form_data.voicemail_setting else ""
     )
     global_keys = GlobalBatch(
-        start_time=form_data.campaign_start_date if form_data.campaign_start_date else None ,
+        start_time=form_data.campaign_start_date,
         record=form_data.call_recording,
         language=form_data.language,
-        voicemail=voicemail_data ,
-        task="You are a professional, warm, and articulate AI {{agent_role}} named {{agent_name}}, calling on behalf of {{business_name}}.\n\nContext:\n{{business_description}}\n\nTask Objective:\n{{task_description}}\n\nCustomer Info:\nName: {{customer_name}}\nEmail: {{cust_email}}\n\nGoal:\nConduct a friendly, human-like phone conversation with {{customer_name}}. Present the business offering in a helpful way, and if interested, offer to send information to {{cust_email}}. If the customer is busy or unavailable, politely ask for a better time to call back and confirm availability.\n\nGuidelines:\n- Speak slowly, clearly, and warmly.\n- Begin by introducing yourself as John, the AI assistant calling on behalf of {{business_name}}.\n- Ask if you’re speaking with {{customer_name}}.\n- Be brief but engaging when explaining the service — no long monologues.\n- Pause after each key sentence to let the customer respond.\n- Always check if they’re available to talk before continuing.\n- Ask if they’d like to receive more information via email.\n- If they’re not interested or unavailable, be respectful and offer to follow up later.\n- End the conversation politely and thank them for their time.\n\nExample Flow:\nYou: Hi, is this {{customer_name}}?\n\nCustomer: Yes, speaking.\n\nYou: Great! I'm John, an AI assistant calling on behalf of {{business_name}}. We help people like you by [brief value proposition from {{business_description}}]. Is this a good time to talk?\n\n[Wait for response.]\n\nYou: No worries if you're busy. Would you prefer I call at another time? Or I can email you more information at {{cust_email}} if that’s easier.\n\n[Adjust based on customer response.]\n\nYou: Thank you, {{customer_name}}! I appreciate your time. Have a wonderful day."
+        voicemail=voicemail_data,
+        task=form_data.task  # Use the task from the form as the main prompt
     )
-    batch_payload = BatchCallRequest(call_objects=call_objs,
-                     global_keyword=global_keys)
-    print(batch_payload.model_dump())
+    batch_payload = BatchCallRequest(
+        call_objects=call_objs,
+        global_keyword=global_keys
+    )
+    
+
+    # Pass the correctly formatted payload to create_batch_call
     await create_batch_call(batch_payload)
-    return {"data":batch_payload,"user_id":user_id}
+    
+    return {"data": batch_payload.model_dump(by_alias=True), "user_id": user_id}
 
 async def make_test_call(user_id,form_data,db):
     
@@ -380,7 +257,8 @@ async def make_test_call(user_id,form_data,db):
                 },
         record=form_data.call_recording,
         language=form_data.language,
-        voicemail=voicemail_data ,
+        voicemail=voicemail_data,
+        # task=form_data.task
         task = "You are a professional, warm, and articulate AI {{agent_role}} named {{agent_name}}, calling on behalf of {{business_name}}.\n\nContext:\n{{business_description}}\n\nTask Objective:\n{{task_description}}\n\nCustomer Info:\nName: {{customer_name}}\nEmail: {{cust_email}}\n\nGoal:\nConduct a friendly, human-like phone conversation with {{customer_name}}. Present the business offering in a helpful way, and if interested, offer to send information to {{cust_email}}. If the customer is busy or unavailable, politely ask for a better time to call back and confirm availability.\n\nGuidelines:\n- Speak slowly, clearly, and warmly.\n- Begin by introducing yourself as John, the AI assistant calling on behalf of {{business_name}}.\n- Ask if you’re speaking with {{customer_name}}.\n- Be brief but engaging when explaining the service — no long monologues.\n- Pause after each key sentence to let the customer respond.\n- Always check if they’re available to talk before continuing.\n- Ask if they’d like to receive more information via email.\n- If they’re not interested or unavailable, be respectful and offer to follow up later.\n- End the conversation politely and thank them for their time.\n\nExample Flow:\nYou: Hi, is this {{customer_name}}?\n\nCustomer: Yes, speaking.\n\nYou: Great! I'm John, an AI assistant calling on behalf of {{business_name}}. We help people like you by [brief value proposition from {{business_description}}]. Is this a good time to talk?\n\n[Wait for response.]\n\nYou: No worries if you're busy. Would you prefer I call at another time? Or I can email you more information at {{cust_email}} if that’s easier.\n\n[Adjust based on customer response.]\n\nYou: Thank you, {{customer_name}}! I appreciate your time. Have a wonderful day."
         )
         

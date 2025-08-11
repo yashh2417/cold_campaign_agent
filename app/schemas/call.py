@@ -1,5 +1,5 @@
 
-from pydantic import BaseModel, field_validator,Field,  model_validator, ConfigDict
+from pydantic import BaseModel, field_validator, Field, model_validator, ConfigDict
 from typing import List, Optional, Dict, Any
 import re
 from datetime import datetime
@@ -56,17 +56,18 @@ class GlobalBatch(BaseModel):
   
     
 class BatchCallItemRequest(BaseModel):
+    phone_number: str
     ivr_mode: Optional[bool] = True
     voice_id: Optional[int] = 0
     reduce_latency: Optional[bool] = True
     request_data: Optional[RequestData] = {}
     metadata: Optional[Dict[str, str]] = {}
-    to_phone: str
     
 
 class BatchCallRequest(BaseModel):
     call_objects: List[BatchCallItemRequest]
-    global_keyword:GlobalBatch=GlobalBatch() 
+    global_keyword: GlobalBatch = Field(..., alias="global")
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class CallBase(BaseModel):
@@ -86,7 +87,7 @@ class CallBase(BaseModel):
 class CallCreate(CallBase):
     call_id: str
     call_thread_id: UUID
-    user_id:str
+    user_id:int
     contact_id:int
     campaign_thread_id:Optional[str] =None
     batch_id: Optional[str] = None

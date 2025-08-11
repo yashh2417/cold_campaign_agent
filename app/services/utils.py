@@ -36,7 +36,6 @@ def llm_generate_data(data):
 
     Output Format (in JSON):
     {{
-    "summary": "<summary_here>",
     "customer_reaction": "<Positive/Negative/Neutral>",
     "next_call_datetime": "<ISO_8601_datetime_or_null>",
     "timezone": "<timezone_or_unknown>",

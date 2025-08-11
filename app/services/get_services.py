@@ -48,39 +48,6 @@ async def get_calls_from_db(limit, skip,db):
         raise HTTPException(status_code=500, detail="Failed to fetch calls")
     
 
-# def get_call_recording_by_id(call_id: str):
-#     BLAND_API_KEY = settings.BLAND_API_KEY
-#     url = f"https://api.bland.ai/v1/recordings/{call_id}"
-#     headers = {
-#         "authorization": f"Bearer {BLAND_API_KEY}",
-#         "content-type": "audio/wav"  # Or "audio/mpeg" for MP3
-#     }
-
-#     bland_response = requests.get(url, headers=headers, stream=True)
-
-#     if bland_response.status_code != 200:
-#         raise HTTPException(status_code=bland_response.status_code, detail="Failed to retrieve recording from Bland")
-
-#     content_type = bland_response.headers.get("Content-Type", "")
-
-#     # Handle unexpected JSON error response
-#     if "application/json" in content_type:
-#         try:
-#             error_data = bland_response.json()
-#             raise HTTPException(
-#                 status_code=400,
-#                 detail=f"Bland API error: {error_data.get('errors') or 'Unknown error'}"
-#             )
-#         except Exception:
-#             raise HTTPException(status_code=500, detail="Invalid JSON in error response from Bland")
-
-#     # Return audio response
-#     return Response(
-#         content=bland_response.content,
-#         media_type=content_type or "audio/wav"
-#     )
-
-
 def get_call_recording_by_id(call_id,db):
     recording_url = get_recording_url(call_id,db)
     print(recording_url)
@@ -116,21 +83,7 @@ async def campaign_add_contacts(campaign_thread_id,db):
     return {'contacts':contacts}
 
 def call_history_from_userID(campaign_thread_id,user_id,db):
-    calls = get_calls_data_from_userID(campaign_thread_id,user_id,db)
-    call_thread_uniq = []
-    data = {}
-    for call in calls:
-        if call[0] not in call_thread_uniq:
-            data[call[0]] = []
-            call_thread_uniq.append(call[0])
-
-        data[call[0]].append(call)
-            
-    
-    for k,v in data.items():
-        for i in v:
-            print(i)
-    return {"calls":data}
+    return get_calls_data_from_userID(campaign_thread_id, user_id, db)
 
 
 def get_all_contacts(user_id,db):
