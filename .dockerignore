@@ -83,3 +83,6 @@ README*
 .env.development
 .env.test
 local_settings.py
+
+campaign_agent
+node_modules/

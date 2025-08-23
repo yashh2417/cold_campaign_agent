@@ -9,4 +9,3 @@ __pycache__/
 *.db
 .git
 campaign_agent
-node_modules/
